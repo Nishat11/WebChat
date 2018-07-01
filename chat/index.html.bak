@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta charset="UTF-8">
+    
+    <title>E-Messenger</title>
+
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/index.css">
+</head>
+
+<script src="/chat/js/jquery-1.12.4.js"></script>
+
+<script src="./js/rmc3.min.js"></script>
+<!-- custom layout for HTML5 audio/video elements -->
+<script src="./js/getMediaElement.js"></script>
+<script src="./js/FileBufferReader.js"></script>
+
+<!-- socket.io for signaling -->
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+    
+    // .......................UI Code........................
+    // Chat ID
+    var chat_id = '';
+
+    // Socket Object
+    var socket = null;
+
+    function setTo(to)
+	{
+        $("#li_" + $("#txtTo").val()).css("color", "black");
+        $("#li_" + to).css("color", "#0370ea");
+        $("#txtTo").val(to);
+    }
+
+    var channel = "";
+    var from = "";
+    var to = "";
+
+    //Chat ongoing user ID
+    var ongoing = "";
+    //Chat archive requesting user ID 
+    var tempid = "";
+
+    //Chat status 0: Initial state 1: create state 2: join state
+    var status = 0;  
+
+    function setRequest(paramChannel)
+	{
+        $("#req_" + channel).css("color", "black");
+        $("#req_" + paramChannel).css("color", "#0370ea");
+        channel = paramChannel;
+    }
+
+    $(document).ready(function() 
+	{
+
+		// userSocket Object
+		socket = io.connect();
+
+        $("#btnJoin").click(function()
+		{
+            chat_id = $("#txtUserID").val();
+            if(chat_id == '')
+			{
+                alert('Please input user ID and try again.');
+                return;
+            }
+            else
+            {
+                chat_in();
+                //alert( "ready!" );
+            }
+            
+        });
+
+        //start chat button event
+        $("#btnStartChat").click(function()
+		{
+            disableInputButtons();
+            var room_id = chat_id + "_" + $("#txtTo").val();
+
+            if($("#txtTo").val() == "")
+			{
+                alert("Please select a user on list for starting chatting.");
+                return;
+            }
+
+            if($("#RequestList").find("#req_" + $("#txtTo").val() + "_" + chat_id).length !== 0)
+			{
+                alert("you already have received request from " + $("#txtTo").val() + ".");
+                return;
+            }
+
+            if(ongoing == $("#txtTo").val())
+			{
+                alert("you are already ongoing with " + ongoing + ".");
+                return;
+            }
+
+            if(tempid == $("#txtTo").val())
+			{
+                alert("you already have been requested to " + $("#txtTo").val() + ".");
+                return;
+            }
+
+            if(tempid != "")
+			{
+                $("#btn-leave-room").click();
+            }
+
+            if(ongoing != "")
+			{
+                socket.emit('heartbeat', '{"type": "block", "from": "' + chat_id + '", "to":"' + ongoing + '"}');
+            }
+
+            connection.open(room_id, function() 
+			{
+                //One created the chat room and send invitations to users
+                tempid = $("#txtTo").val();
+                socket.emit('heartbeat', '{"type": "accept", "from": "' + chat_id + '", "to":"' + $("#txtTo").val() + '"}');
+            });
+        });
+
+        $("#btnAccept").click(function()
+		{
+            if(channel == "")
+			{
+                alert("Please select a request on list for accepting.");
+                return;
+            }
+			
+			if(ongoing != "")
+			{
+                alert("It will disconnect from current user.");
+                socket.emit('heartbeat', '{"type": "block", "from": "' + chat_id + '", "to":"' + ongoing + '"}');
+            }
+
+            disableInputButtons();
+            connection.join(channel);
+
+            ongoing = to;
+            $('#divStatus').html("chat with " + ongoing);
+            $("#li_" + ongoing).css("color", "#0370ea");
+
+            $("#req_"+channel).remove();
+            channel = "";
+
+            status = 2;
+
+            socket.emit('heartbeat', '{"type": "ongoing", "from": "' + from + '", "to":"' + to + '"}');
+        });
+
+        $("#btnCancel").click(function()
+		{
+            if(channel == "")
+			{
+                alert("Please select a request on list for canceling.");
+                return;
+            }
+            status = 0;
+            $("#req_" + channel).remove();
+            socket.emit('heartbeat', '{"type": "cancel", "from": "' + from + '", "to":"' + to + '"}');
+        });
+		
+        // If the connection fails socket events
+        socket.on('chat_fail', function (data) 
+		{
+            data = JSON.parse(data);
+            alert(data + ' is already registered. try again using other id.');
+            return;
+        });
+
+        // If successful the connection socket events
+        socket.on('chat_join', function (data) 
+		{
+            refresh_userlist(data);
+        });
+        // Socket event updtae current user list
+        socket.on('refresh_userlist', function (data) 
+		{
+            refresh_userlist(data);
+        });
+
+        //Event processing incoming requests other users handeseo
+        socket.on('heartbeat', function (data) 
+		{
+            data = JSON.parse(data);
+            if(data.type == "accept")
+			{
+                if(data.to == chat_id)
+				{
+                    channel = data.from + "_" + data.to;
+                    to = data.from;
+                    from = data.to;
+                    if($("#RequestList").find("#req_" + channel).length === 0)
+                        $("#RequestList").append('<li id="req_' + channel + '" class="liRequest" onclick="setRequest(\'' + channel + '\')">requesting 								from ' + data.from + '!</li>');
+                }
+            }
+			else if(data.type == "ongoing")
+			{
+                if(data.to == chat_id)
+				{
+                    status = 1;
+                    ongoing = data.from;
+                    $('#divStatus').html("chat with " + ongoing);
+                    $('.chat-output').html("");
+                    $('.file-container').html("");
+                }               
+            }
+			else if(data.type == "cancel")
+			{
+                if(data.to == chat_id)
+				{
+                    $("#li_"+ data.from).css("color", "black");
+                    channel = "";
+                    from = "";
+                    to = "";
+                    //ongoing = "";
+                    tempid = "";
+
+                    status = 0;
+
+                    $("#btn-leave-room").click();
+                }
+            }
+			else if(data.type == "block")
+			{
+                if(data.to == chat_id)
+				{
+                    $("#btn-leave-room").click();
+                }
+            }
+        });
+
+        // When you close the browser events
+        $(window).unload(function() 
+		{
+            // Sign out of chat
+            chat_out();
+        });
+
+		// Chat connection to the event
+		function chat_in() 
+		{
+			socket.emit('chat_conn', '{"channel": "workspace", "chat_id":"' + chat_id + '"}');
+		}
+		// Exit Chat Events
+		function chat_out() 
+		{
+			socket.emit('leave', '{"channel": "workspace", "chat_id":"' + chat_id + '"}');
+		}
+        // refresh user list
+        function refresh_userlist(data)
+		{
+            data = JSON.parse(data);
+            $('#UserList').empty();
+            for(var i=0; i<data.length; i++)
+			{
+                var user_id = data[i];
+                if (user_id != chat_id) 
+				{
+                    $('#UserList').append('<li id="li_' + user_id + '" class="liUser" onclick="setTo(\'' + user_id + '\')">' + user_id + '</li>');
+                    if(user_id == ongoing)
+					{
+                        $("#li_"+ user_id).css("color", "#0370ea");
+                    }
+                }
+            }
+            $("#divLogin").css("display", "none");
+            $("#divChat").css("display", "block");
+        }
+
+
+        document.getElementById('btn-leave-room').onclick = function() 
+		{
+            if(status == 1)
+			{
+                socket.emit('heartbeat', '{"type": "block", "from": "' + chat_id + '", "to":"' + ongoing + '"}');
+                this.disabled = true;
+                if(connection.isInitiator) 
+				{
+                    connection.closeEntireSession();
+                }
+                else 
+				{
+                    connection.leave();
+                }
+                ongoing = "";
+                tempid = "";
+
+                $("#divStatus").html("");
+
+            }
+			else if(status == 2)
+			{
+                socket.emit('heartbeat', '{"type": "block", "from": "' + chat_id + '", "to":"' + ongoing + '"}');
+                ongoing = "";
+            }
+
+        };
+
+     
+        // ................FileSharing/TextChat Code.............
+ 
+        document.getElementById('share-file').onclick = function() 
+		{
+            var fileSelector = new FileSelector();
+            fileSelector.selectSingleFile(function(file) 
+			{
+                connection.send(file);
+            });
+        };
+
+        document.getElementById('send-text').onclick = function(e) 
+		{
+            this.value = document.getElementById('input-text-chat').value.replace(/^\s+|\s+$/g, '');
+            if (!this.value.length) 
+				return;
+            this.value = chat_id + ": " + this.value;
+            connection.send(this.value);
+            appendDIV(this.value);
+            this.value = '';
+        };
+
+        document.getElementById('input-text-chat').onkeyup = function(e) 
+		{
+            if (e.keyCode != 13) 
+				return;
+
+            // removing trailing/leading whitespace
+            this.value = this.value.replace(/^\s+|\s+$/g, '');
+            if (!this.value.length) return;
+            connection.send(this.value);
+            appendDIV(this.value);
+            this.value = '';
+        };
+
+        var chatContainer = document.querySelector('.chat-output');
+
+        function appendDIV(event) 
+		{
+            var div = document.createElement('div');
+            div.innerHTML = event.data || event;
+            chatContainer.insertBefore(div, chatContainer.firstChild);
+            div.tabIndex = 0;
+            div.focus();
+            document.getElementById('input-text-chat').focus();
+        }
+
+       
+        // ..................RTCMultiConnection Code.............
+      
+        var connection = new RTCMultiConnection();
+        
+        // by default, socket.io server is assumed to be deployed on your own URL
+        connection.socketURL = '/';
+
+        // comment-out below line if you do not have your own socket.io server
+        // connection.socketURL = 'https://rtcmulticonnection.herokuapp.com:443/';
+
+        connection.socketMessageEvent = 'audio-video-file-chat-demo';
+        connection.enableFileSharing = true; // by default, it is "false".
+        connection.session = 
+		{
+            audio: true,
+            data: true
+        };
+
+        connection.sdpConstraints.mandatory = 
+		{
+            OfferToReceiveAudio: true,
+            OfferToReceiveVideo: false
+        };
+        //video
+        connection.mediaConstraints.video = false;
+        connection.audiosContainer = document.getElementById('audios-container');
+        connection.onstream = function(event) 
+		{
+            var width = parseInt(connection.audiosContainer.clientWidth / 2) - 20;
+            var mediaElement = getMediaElement(event.mediaElement, { title: event.userid, buttons: ['full-screen'],  width: width, showOnMouseEnter: 			            false});
+            connection.audiosContainer.appendChild(mediaElement);
+
+            setTimeout(function() 
+			{
+                mediaElement.media.play();
+            }, 5000);
+			
+            mediaElement.id = event.streamid;
+        };
+
+        connection.onstreamended = function(event) 
+		{
+            var mediaElement = document.getElementById(event.streamid);
+            if(mediaElement) 
+			{
+                mediaElement.parentNode.removeChild(mediaElement);
+            }
+        };
+
+        connection.onmessage = appendDIV;
+        connection.filesContainer = document.getElementById('file-container');
+        connection.onopen = function() 
+		{
+            document.getElementById('send-text').disabled = false;
+            document.getElementById('share-file').disabled = false;
+            document.getElementById('input-text-chat').disabled = false;
+            document.getElementById('btn-leave-room').disabled = false;
+
+            //document.querySelector('h1').innerHTML = 'You are connected with: ' + connection.getAllParticipants().join(', ');
+        };
+
+        connection.onclose = function() 
+		{
+            if(connection.getAllParticipants().length) 
+			{
+                //document.querySelector('h1').innerHTML = 'You are still connected with: ' + connection.getAllParticipants().join(', ');
+            }
+            else 
+			{
+                //document.querySelector('h1').innerHTML = 'Seems session has been closed or all participants left.';
+            }
+        };
+
+        connection.onEntireSessionClosed = function(event) 
+		{
+            document.getElementById('send-text').disabled = true;
+            document.getElementById('share-file').disabled = true;
+            document.getElementById('input-text-chat').disabled = true;
+            document.getElementById('btn-leave-room').disabled = true;
+
+            document.getElementById('room-id').disabled = false;
+
+            connection.attachStreams.forEach(function(stream) 
+			{
+                stream.stop();
+            });
+
+            // don't display alert for moderator
+            if(connection.userid === event.userid) 
+				return;
+            //document.querySelector('h1').innerHTML = 'Entire session has been closed by the moderator: ' + event.userid;
+        };
+
+        connection.onUserIdAlreadyTaken = function(useridAlreadyTaken, yourNewUserId) 
+		{
+            // seems room is already opened
+            connection.join(useridAlreadyTaken);
+        };
+
+        function disableInputButtons() 
+		{
+            document.getElementById('room-id').disabled = true;
+        }
+
+        // ......................................................
+        // ......................Handling Room-ID................
+        // ......................................................
+
+        (function() 
+		{
+            var params = {},
+                r = /([^&=]+)=?([^&]*)/g;
+
+            function d(s) 
+			{
+                return decodeURIComponent(s.replace(/\+/g, ' '));
+            }
+            var match, search = window.location.search;
+            while (match = r.exec(search.substring(1)))
+                params[d(match[1])] = d(match[2]);
+            window.params = params;
+        })();
+
+        var roomid = '';
+        if (localStorage.getItem(connection.socketMessageEvent)) 
+		{
+            roomid = localStorage.getItem(connection.socketMessageEvent);
+        } 
+		else 
+		{
+            roomid = connection.token();
+        }
+        document.getElementById('room-id').value = roomid;
+        document.getElementById('room-id').onkeyup = function() 
+		{
+            localStorage.setItem(connection.socketMessageEvent, this.value);
+        };
+
+        var hashString = location.hash.replace('#', '');
+        if(hashString.length && hashString.indexOf('comment-') == 0) 
+		{
+            hashString = '';
+        }
+
+        var roomid = params.roomid;
+        if(!roomid && hashString.length) 
+		{
+            roomid = hashString;
+        }
+
+        if(roomid && roomid.length)
+		 {
+            document.getElementById('room-id').value = roomid;
+            localStorage.setItem(connection.socketMessageEvent, roomid);
+
+            // auto-join-room
+            (function reCheckRoomPresence() 
+			{
+                connection.checkPresence(roomid, function(isRoomExists) 
+				{
+                    if(isRoomExists) 
+					{
+                        connection.join(roomid);
+                        return;
+                    }
+                    setTimeout(reCheckRoomPresence, 5000);
+                });
+            })();
+            disableInputButtons();
+        }
+    });
+</script>
+
+<body>
+    <div id="divLogin">
+        <header style="text-align: center;">
+            Please enter your name.
+        </header>
+        <section style="text-align: center;">
+            <input type="text" id="txtUserID" value="" maxlength="20" style="width:200px;">
+            <button id="btnJoin">Join</button>
+        </section>
+    </div>
+    <div id="divChat">
+        <header style="text-align: center;">
+            <h1>E-Messenger</h1>
+        </header>
+
+        <section class="experiment">
+            <table>
+                <tr>
+                    <td>
+                        <div class="make-center">
+                            <ul id="RequestList">
+                            </ul>
+                        </div>
+                        <div class="make-center">
+                            <button id="btnAccept">Accept</button>
+                            <button id="btnCancel">Cancel</button>
+                        </div>                        
+                    </td>
+                    <td>
+                        <div class="make-center">
+                            <input type="hidden" id="room-id">
+                            <ul id="UserList">
+                            </ul>
+                        </div>
+                        <div class="make-center">
+                            <button id="btnStartChat">Start Chat</button>
+                            <button id="btn-leave-room" disabled>Stop</button>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="make-center">
+                            <div id="divStatus"></div>
+                        </div>
+                        <div class="chatContainer">
+                            <div id="file-container"></div>
+                            <div class="chat-output"></div>
+                        </div>
+                        <div class="make-center">
+                            <input type="hidden" id="txtTo" disabled style="width:50px;">
+                            <input type="text" id="input-text-chat" placeholder="Enter Text Chat" disabled>
+                            <button id="send-text" disabled>Send</button>
+                            <button id="share-file" disabled>Share File</button>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+            <div id="audios-container" style="display:none;"></div>
+        </section>
+    </div>
+</body>
+</html>

@@ -1,0 +1,2 @@
+Need to install Node.JS on server 
+Application can run on private newtwork with one machine as a Host server with Node.Js

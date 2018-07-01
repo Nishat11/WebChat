@@ -1,0 +1,95 @@
+#divLogin {
+    background: #fff; 
+    border: 1px solid; 
+    margin: 2.5em auto 0 auto; 
+    padding: 2em; 
+    width:1000px; 
+    border-color: gray;
+}
+
+#divChat {
+    background: #fff; 
+    border: 1px solid; 
+    border-color: gray;
+    margin: 2.5em auto 0 auto; 
+    padding: 2em; 
+    width:1000px; 
+    display:none;
+}
+#username{
+   
+    position:  absolute;
+    top: 100px;
+    right: 200px;
+}
+#RequestList {
+    width:150px; 
+    height:300px; 
+    overflow-y: scroll; 
+    border-width: 1px; 
+    border-style: solid; 
+    border-color: gray;
+    padding: 1px; 
+	line-height: 120%; 
+}
+
+.liRequest {
+    border-style:none;
+}
+
+.liRequest:hover{
+    background-color:gray;
+    cursor: pointer;
+}
+
+#UserList {
+    width:150px; 
+    height:300px; 
+    overflow-y: scroll; 
+    border-width: 1px; 
+    border-style: solid; 
+    border-color: gray;
+    padding: 1px; 
+	line-height: 120%; 
+}
+
+.liUser {
+    border-style:none;
+}
+
+.liUser:hover{
+    background-color:gray;
+    cursor: pointer;
+}
+
+.chatContainer{
+    width:350px; 
+    height:300px; 
+    overflow-y: scroll; 
+    border-width: 1px; 
+    border-style: solid; 
+    border-color: gray;
+    text-align: left;
+    padding: 5px 10px;
+}
+
+video {
+    object-fit: fill;
+    width: 100%;
+}
+button,
+input,
+select {
+    font-weight: normal;
+    padding: 2px 4px;
+    text-decoration: none;
+    display: inline-block;
+    text-shadow: none;
+    font-size: 16px;
+    outline: none;
+}
+.make-center {
+    text-align: center;
+    padding: 5px 10px;
+}
+
